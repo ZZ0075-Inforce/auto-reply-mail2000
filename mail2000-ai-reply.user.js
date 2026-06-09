@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Mail2000 AI 自動回覆
 // @namespace    https://github.com/inforce/mail2000-ai-reply
-// @version      0.1.0
+// @version      0.2.0
 // @description  在 Mail2000(Openfind) 回信編輯器注入「AI 生成回覆」按鈕；讀取原信內容、依主旨規則套用 system prompt，呼叫可切換的 LLM(OpenAI/Anthropic/Gemini) 生成繁中回覆草稿。絕不自動送信。
 // @author       cowork
 // @match        https://mail.inforce.com.tw/*
@@ -245,10 +245,110 @@
   }
 
   // =========================================================================
-  // 6. LLM 呼叫（adapter 於階段二實作）
+  // 6. LLM 呼叫（OpenAI / Anthropic / Gemini，可切換）
   // =========================================================================
-  // function callLLM(cfg, systemPrompt, userContent) -> Promise<string>
-  //   於後續 commit 加入 OpenAI / Anthropic / Gemini adapter。
+  // 從 API 錯誤回應中萃取簡短訊息
+  function shortErr(responseText) {
+    if (!responseText) return '';
+    try {
+      const j = JSON.parse(responseText);
+      const m = (j.error && (j.error.message || j.error.status)) ||
+        (j.message) ||
+        (Array.isArray(j) && j[0] && j[0].error && j[0].error.message);
+      if (m) return String(m).slice(0, 200);
+    } catch (e) { /* 非 JSON */ }
+    return String(responseText).replace(/\s+/g, ' ').slice(0, 160);
+  }
+
+  // 依供應商組出請求規格 { url, headers, data, parse }
+  function buildRequestSpec(provider, key, model, system, user) {
+    if (provider === 'openai') {
+      return {
+        url: PROVIDERS.openai.endpoint,
+        headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + key },
+        data: JSON.stringify({
+          model: model,
+          temperature: 0.7,
+          messages: [
+            { role: 'system', content: system },
+            { role: 'user', content: user }
+          ]
+        }),
+        parse: function (j) { return j.choices && j.choices[0] && j.choices[0].message && j.choices[0].message.content; }
+      };
+    }
+    if (provider === 'anthropic') {
+      return {
+        url: PROVIDERS.anthropic.endpoint,
+        headers: {
+          'Content-Type': 'application/json',
+          'x-api-key': key,
+          'anthropic-version': '2023-06-01',
+          'anthropic-dangerous-direct-browser-access': 'true'
+        },
+        data: JSON.stringify({
+          model: model,
+          max_tokens: 1500,
+          temperature: 0.7,
+          system: system,
+          messages: [{ role: 'user', content: user }]
+        }),
+        parse: function (j) {
+          return j.content && j.content.map(function (b) { return b.text || ''; }).join('');
+        }
+      };
+    }
+    if (provider === 'gemini') {
+      return {
+        url: PROVIDERS.gemini.endpoint + '/' + encodeURIComponent(model) + ':generateContent',
+        headers: { 'Content-Type': 'application/json', 'x-goog-api-key': key },
+        data: JSON.stringify({
+          system_instruction: { parts: [{ text: system }] },
+          contents: [{ role: 'user', parts: [{ text: user }] }],
+          generationConfig: { temperature: 0.7 }
+        }),
+        parse: function (j) {
+          return j.candidates && j.candidates[0] && j.candidates[0].content &&
+            j.candidates[0].content.parts.map(function (p) { return p.text || ''; }).join('');
+        }
+      };
+    }
+    throw new Error('未知的供應商：' + provider);
+  }
+
+  // 透過 GM_xmlhttpRequest 呼叫（繞過頁面 CORS/CSP）→ Promise<string>
+  function callLLM(cfg, system, user) {
+    const provider = cfg.provider;
+    const key = (cfg.apiKeys || {})[provider];
+    const model = cfg.model || PROVIDERS[provider].defaultModel;
+    const spec = buildRequestSpec(provider, key, model, system, user);
+    log('callLLM', provider, model);
+    return new Promise(function (resolve, reject) {
+      GM_xmlhttpRequest({
+        method: 'POST',
+        url: spec.url,
+        headers: spec.headers,
+        data: spec.data,
+        timeout: 60000,
+        onload: function (res) {
+          if (res.status < 200 || res.status >= 300) {
+            reject(new Error('HTTP ' + res.status + '：' + shortErr(res.responseText)));
+            return;
+          }
+          let json;
+          try { json = JSON.parse(res.responseText); }
+          catch (e) { reject(new Error('回應非 JSON')); return; }
+          let text;
+          try { text = spec.parse(json); }
+          catch (e) { reject(new Error('回應格式不符：' + e.message)); return; }
+          if (!text || !String(text).trim()) { reject(new Error('回應無有效內容')); return; }
+          resolve(String(text));
+        },
+        onerror: function () { reject(new Error('網路錯誤（請確認 @connect 與連線）')); },
+        ontimeout: function () { reject(new Error('請求逾時（60s）')); }
+      });
+    });
+  }
 
   // =========================================================================
   // 7. 將生成內容寫入回信編輯器
@@ -272,7 +372,7 @@
   }
 
   // =========================================================================
-  // 8. 生成流程（階段一：擷取 + 選 prompt，網路呼叫於階段二接上）
+  // 8. 生成流程
   // =========================================================================
   async function generateReply() {
     const cfg = loadConfig();
@@ -286,17 +386,6 @@
     }
     const picked = pickSystemPrompt(mail.subject, cfg);
     log('extracted', mail, 'rule', picked.ruleName);
-
-    if (typeof callLLM !== 'function') {
-      toast(
-        '【階段一驗證】擷取成功：\n主旨：' + (stripRePrefix(mail.subject) || '(無)') +
-        '\n套用規則：' + (picked.ruleName || '預設') +
-        '\n內文字數：' + mail.body.length +
-        '\n(LLM 串接將於下一階段接上)',
-        'info'
-      );
-      return;
-    }
 
     const key = (cfg.apiKeys || {})[cfg.provider];
     if (!key) { toast('尚未設定 ' + cfg.provider + ' 的 API Key，請先開啟「AI 設定」。', 'warn'); return; }
@@ -344,7 +433,7 @@
   }
 
   function injectComposeButtons() {
-    if (!isComposeFrame()) return;
+    if (!isComposeFrame()) return false;
     const anchor = document.getElementById('TemplateMenu');
     if (!anchor || !anchor.parentNode) return false;
     if (document.getElementById(BTN_ID)) return true; // 已注入
@@ -466,6 +555,7 @@
 
     // 目前各 provider 的 key（暫存在記憶體，儲存時寫回）
     const keys = Object.assign({}, cfg.apiKeys);
+    let prevProvider = providerSel.value;
 
     function refreshProviderView() {
       const p = providerSel.value;
@@ -477,7 +567,6 @@
       prevProvider = providerSel.value;
       refreshProviderView();
     });
-    let prevProvider = providerSel.value;
     refreshProviderView();
 
     $('m2kToggleKey').addEventListener('click', function () {
