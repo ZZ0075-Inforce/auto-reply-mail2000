@@ -1,3 +1,5 @@
 __pycache__/
 dist/dev-loader.user.js
 *.local.json
+.gstack/
+mockups/

@@ -44,5 +44,10 @@ const DEFAULT_CONFIG = {
       matchType: 'contains',       // contains | startsWith | regex
       systemPrompt: '這是請假/出勤相關信件，請以主管核示的語氣回覆，明確表達是否同意並提醒交接事項。'
     }
-  ]
+  ],
+  // 自訂供應商（僅限本機 localhost／127.0.0.1）：每項 { id, label, protocol, baseUrl, defaultModel }
+  // protocol ∈ openai | anthropic | gemini（相容協定，沿用既有三種 wire format）
+  customProviders: [],
+  // per-provider 模型記憶：{ [providerId]: model }；切供應商各自記住上次選的模型
+  models: {}
 };

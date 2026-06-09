@@ -22,13 +22,14 @@ function injectComposeButtons() {
   if (!anchor || !anchor.parentNode) return false;
   if (document.getElementById(BTN_ID)) return true; // 已注入
 
-  const genBtn = makeToolbarButton(document, BTN_ID, '🤖 AI 生成回覆',
+  const genBtn = makeToolbarButton(document, BTN_ID, '💡 AI 生成回覆',
     '依原信內容與主旨規則生成回覆草稿（不會自動送信）', generateReply);
   const setBtn = makeToolbarButton(document, SETTINGS_BTN_ID, '⚙',
     'AI 回覆設定', openSettings);
 
-  anchor.parentNode.insertBefore(genBtn, anchor.nextSibling);
-  anchor.parentNode.insertBefore(setBtn, genBtn.nextSibling);
+  // 注入在「信件範本」(#TemplateMenu) 左邊：genBtn、setBtn 依序插在 anchor 之前
+  anchor.parentNode.insertBefore(genBtn, anchor);
+  anchor.parentNode.insertBefore(setBtn, anchor);
   log('buttons injected');
   return true;
 }

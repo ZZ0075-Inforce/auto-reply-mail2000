@@ -13,6 +13,8 @@
 // @connect      api.openai.com
 // @connect      api.anthropic.com
 // @connect      generativelanguage.googleapis.com
+// @connect      localhost
+// @connect      127.0.0.1
 // @updateURL    https://raw.githubusercontent.com/ZZ0075-Inforce/auto-reply-mail2000/main/dist/mail2000-ai-reply.user.js
 // @downloadURL  https://raw.githubusercontent.com/ZZ0075-Inforce/auto-reply-mail2000/main/dist/mail2000-ai-reply.user.js
 // ==/UserScript==

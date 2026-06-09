@@ -40,6 +40,7 @@ BODY_MODULES = [
     "llm-adapter.js",    # LLM 呼叫：shortErr / buildRequestSpec / callLLM（三家可切換）
     "insert-reply.js",   # 寫入編輯器：insertReply
     "generate.js",       # 生成流程：generateReply
+    "settings-style.js", # 設定面板樣式：m2kai- CSS（稍後新增的模組）
     "settings-ui.js",    # 設定面板：openSettings 等
     "button-injector.js",# 按鈕注入：makeToolbarButton / injectComposeButtons
     "boot.js",           # 啟動：boot()（末行呼叫 boot()）
@@ -118,6 +119,8 @@ def write_dev_loader() -> None:
         "// @connect      api.openai.com\n"
         "// @connect      api.anthropic.com\n"
         "// @connect      generativelanguage.googleapis.com\n"
+        "// @connect      localhost\n"
+        "// @connect      127.0.0.1\n"
         f"// @require      {dist_uri}\n"
         "// ==/UserScript==\n"
         "\n"

@@ -40,10 +40,11 @@ node --check dist/mail2000-ai-reply.user.js   # 語法驗證（會抓重複宣�
 | 6 | `rules.js` | `pickRule` / `pickSystemPrompt` | utils(stripRePrefix) |
 | 7 | `llm-adapter.js` | `shortErr` / `buildRequestSpec` / `callLLM`（三家 adapter） | constants, utils(log), GM_xmlhttpRequest |
 | 8 | `insert-reply.js` | `insertReply` | frame-utils, utils(toast) |
-| 9 | `generate.js` | `generateReply`（端到端調度） | 上述大部分 |
-| 10 | `settings-ui.js` | `openSettings` / `renderSettingsHtml` / `bindSettingsEvents` 等 | constants, config-store, utils |
-| 11 | `button-injector.js` | `makeToolbarButton` / `injectComposeButtons` | frame-utils, generate, settings-ui |
-| 12 | `boot.js` | `boot()` + 末行 `boot();` | frame-utils, button-injector, settings-ui |
+| 9 | `generate.js` | `generateReply`（端到端調度；loading 計時動畫） | 上述大部分 |
+| 10 | `settings-style.js` | `ensureSettingsStyle`（注入 scoped CSS：`m2kai-` 設計系統、深淺主題） | utils(topDoc) |
+| 11 | `settings-ui.js` | `openSettings`（master-detail 設定面板：三 Tab + autosave + per-provider model + 測試/抓取模型） | constants, config-store, utils, llm-adapter |
+| 12 | `button-injector.js` | `makeToolbarButton` / `injectComposeButtons` | frame-utils, generate, settings-ui |
+| 13 | `boot.js` | `boot()` + 末行 `boot();` | frame-utils, button-injector, settings-ui |
 
 **載入順序規則**：唯一硬性限制是 `boot.js` 必須最後（它是唯一的 top-level 執行碼，須在所有宣告後跑）。
 其餘模組間互引都在呼叫時解析，順序可調整。新增模組：在 `BODY_MODULES` 加檔名即可（順序即載入順序）。
